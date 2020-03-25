@@ -1,0 +1,174 @@
+*&---------------------------------------------------------------------*
+*&  Include           ZP_MARADATA_TOP
+*&---------------------------------------------------------------------*
+
+TABLES : makt, ztl_maradata.
+
+type-POOLS slis.
+
+TYPES : BEGIN OF gty_mara,
+          zzmatnr TYPE ztl_maradata-zzmatnr,
+          zzmtart TYPE ztl_maradata-zzmtart,
+          zzmbrsh TYPE ztl_maradata-zzmbrsh,
+          zzmeins TYPE ztl_maradata-zzmeins,
+          zznum TYPE ztl_maradata-zznum,
+        END OF gty_mara,
+
+        BEGIN OF gty_makt,
+          matnr TYPE makt-matnr,
+          spras TYPE makt-spras,
+          maktx TYPE makt-maktx,
+        END OF gty_makt.
+
+DATA : gwa_mara TYPE gty_mara,
+       gt_mara TYPE STANDARD TABLE OF gty_mara,
+       gwa_makt TYPE gty_makt,
+       gt_makt TYPE STANDARD TABLE OF gty_makt.
+
+*&---------------------------------------------------------------------*
+*&  Include           ZP_MARADATA_SEL
+*&---------------------------------------------------------------------*
+
+SELECT-OPTIONS : so_matnr FOR ztl_maradata-zzmatnr.
+
+*&---------------------------------------------------------------------*
+*&  Include           ZP_MARADATA_LOG
+*&---------------------------------------------------------------------*
+
+FORM result USING xv_name
+                  xv_desc
+                  xv_tabname
+         CHANGING xt_fieldcat
+             TYPE slis_t_fieldcat_alv.
+  TYPE-POOLS : slis.
+
+  DATA : lwa_fieldcat TYPE slis_fieldcat_alv.
+
+  lwa_fieldcat-fieldname = xv_name.
+  lwa_fieldcat-seltext_m = xv_desc.
+  lwa_fieldcat-tabname   = xv_tabname.
+
+  IF  lwa_fieldcat-fieldname = 'ZZMATNR'.
+    lwa_fieldcat-hotspot = 'abap-true'.
+  endif.
+
+  APPEND lwa_fieldcat TO xt_fieldcat.
+
+ENDFORM.                    "result
+
+*&---------------------------------------------------------------------*
+*&      Form  get_data
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+FORM get_data .
+
+  TYPE-POOLS : slis.
+
+  DATA : lwa_fieldcat TYPE slis_fieldcat_alv,
+         lt_fieldcat  TYPE TABLE OF slis_fieldcat_alv.
+
+  SELECT zzmatnr zzmtart zzmbrsh zzmeins zznum
+           FROM ztl_maradata
+     INTO TABLE gt_mara
+          WHERE zzmatnr IN so_matnr.
+
+  IF sy-subrc NE 0.
+    MESSAGE 'No Document found' TYPE 'I'.
+    LEAVE LIST-PROCESSING.
+  ENDIF.
+
+  PERFORM result USING 'ZZMATNR' 'Material Number' 'VBAK'
+                 CHANGING lt_fieldcat.
+
+  PERFORM result USING 'ZZMTART' 'Material Type' 'VBAK'
+                 CHANGING lt_fieldcat.
+
+  PERFORM result USING 'ZZMBRSH' 'Industry Sector' 'VBAK'
+                 CHANGING lt_fieldcat.
+
+  PERFORM result USING 'ZZMEINS' 'Unit Information' 'VBAK'
+                 CHANGING lt_fieldcat.
+
+  PERFORM result USING 'ZZNUM' 'Number of Languages' 'VBAK'
+                 CHANGING lt_fieldcat.
+
+
+  PERFORM display_data USING gt_mara lt_fieldcat.
+
+ENDFORM.                    "get_data
+
+*&---------------------------------------------------------------------*
+*&      Form  display_data
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      -->XT_FIN       text
+*      -->XT_FIELDCAT  text
+*----------------------------------------------------------------------*
+FORM display_data USING xt_fin TYPE STANDARD TABLE xt_fieldcat
+                   TYPE slis_t_fieldcat_alv.
+
+  DATA : lwa_layout TYPE slis_layout_alv.
+
+  IF xt_fin IS NOT INITIAL.
+    lwa_layout-zebra             = abap_true.
+    lwa_layout-colwidth_optimize = abap_true.
+
+
+    CALL FUNCTION 'REUSE_ALV_GRID_DISPLAY'
+      EXPORTING
+        i_callback_program = sy-repid
+        is_layout          = lwa_layout
+        it_fieldcat        = xt_fieldcat
+        i_callback_user_command = 'HOTSPOT'
+      TABLES
+        t_outtab           = xt_fin
+      EXCEPTIONS
+        program_error      = 1
+        OTHERS             = 2.
+    IF sy-subrc <> 0.
+      MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
+      WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+    ENDIF.
+
+  ENDIF.
+ENDFORM.                    "display_data
+
+FORM hotspot USING xv_ucomm TYPE sy-ucomm
+              xwa_structure TYPE slis_selfield.
+
+  DATA : lwa_fieldcat TYPE slis_fieldcat_alv,
+         lt_fieldcat  TYPE slis_t_fieldcat_alv,
+         lwa_makt     TYPE gty_makt,
+         lt_makt      TYPE STANDARD TABLE OF gty_makt.
+
+  CASE xv_ucomm.
+    WHEN '&IC1'.
+      CASE xwa_structure-fieldname.
+        WHEN 'ZZMATNR'.
+
+          SELECT matnr spras maktx FROM makt
+                   INTO TABLE gt_makt
+                  WHERE matnr EQ xwa_structure-value.
+
+          IF sy-subrc EQ 0.
+            CLEAR lt_fieldcat.
+
+            PERFORM result USING 'MATNR' 'Material Number' 'MAKT'
+                      CHANGING lt_fieldcat.
+
+            PERFORM result USING 'SPRAS' 'Language'  'MAKT'
+                      CHANGING lt_fieldcat.
+
+            PERFORM result USING 'MAKTX' 'Description' 'MAKT'
+                      CHANGING lt_fieldcat.
+
+
+
+            PERFORM display_data USING gt_makt lt_fieldcat.
+          ENDIF.
+      ENDCASE.
+  ENDCASE.
+
+ENDFORM.
